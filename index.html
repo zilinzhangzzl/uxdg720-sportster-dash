@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>摩托车仪表盘原型</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>Sportster S 仪表盘交互原型</h1>
+    <p>课程原型 · 只模拟页面、按钮、状态和弹窗逻辑，不连接真实车辆</p>
+  </header>
+
+  <main class="layout">
+    <!-- 区域 1：仪表盘（只显示，不接受点击） -->
+    <section class="zone zone-dash" aria-label="仪表盘显示">
+      <h2 class="zone-title">① 仪表盘</h2>
+      <div class="dial-frame">
+        <div class="dial" id="dial" aria-live="polite">
+          <div class="dial-screen" id="dialScreen">
+            <div class="persistent" id="persistent"></div>
+            <div class="content" id="content">
+              <div class="page" id="page"></div>
+              <div class="restrict-layer" id="restrictLayer" hidden></div>
+              <div class="overlay" id="overlay" hidden></div>
+            </div>
+            <div class="protected" id="protected"></div>
+          </div>
+          <div class="boot-screen" id="bootScreen" hidden>
+            <div class="boot-mark">SPORTSTER S</div>
+            <div class="boot-bar"><span id="bootBar"></span></div>
+          </div>
+        </div>
+      </div>
+      <p class="hint" id="availableHelp" aria-live="polite"></p>
+    </section>
+
+    <!-- 区域 2：模拟实体按钮 -->
+    <section class="zone zone-buttons" aria-label="模拟实体按钮">
+      <h2 class="zone-title">② 模拟实体按钮</h2>
+      <div class="switch-cube">
+        <div class="col-left">
+          <button type="button" class="hw" data-btn="trip">Trip<kbd>T</kbd></button>
+          <button type="button" class="hw" data-btn="page">Page<kbd>P</kbd></button>
+          <button type="button" class="hw" data-btn="home">Home<kbd>H</kbd></button>
+        </div>
+        <div class="dpad">
+          <button type="button" class="hw dir up" data-btn="up" aria-label="上">▲<kbd>↑</kbd></button>
+          <button type="button" class="hw dir left" data-btn="left" aria-label="左">◀<kbd>←</kbd></button>
+          <button type="button" class="hw dir ok" data-btn="ok" aria-label="确认">OK<kbd>Enter</kbd></button>
+          <button type="button" class="hw dir right" data-btn="right" aria-label="右">▶<kbd>→</kbd></button>
+          <button type="button" class="hw dir down" data-btn="down" aria-label="下">▼<kbd>↓</kbd></button>
+        </div>
+      </div>
+      <button type="button" class="hw power" data-btn="power">⏻ Power<kbd>X</kbd></button>
+      <div class="last-input" id="lastInput">尚无输入</div>
+      <details class="shortcut-list" open>
+        <summary>键盘快捷键</summary>
+        <ul>
+          <li><kbd>X</kbd> Power 开机 / 关机</li>
+          <li><kbd>H</kbd> Home　<kbd>P</kbd> Page　<kbd>T</kbd> Trip</li>
+          <li><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 方向　<kbd>Enter</kbd> 确认</li>
+          <li>按下并松开算一次；长按不会重复触发。在演示面板输入框里打字时快捷键不生效。</li>
+        </ul>
+      </details>
+    </section>
+
+    <!-- 区域 3：演示控制（不属于车辆界面） -->
+    <section class="zone zone-demo" aria-label="演示控制">
+      <h2 class="zone-title demo-tag">③ 演示控制 <span>不属于车辆界面</span></h2>
+
+      <fieldset>
+        <legend>模拟车速</legend>
+        <form id="speedForm" class="row">
+          <input id="speedInput" type="text" inputmode="decimal" value="0" aria-label="车速 km/h">
+          <span class="unit">km/h</span>
+          <button type="submit">应用</button>
+        </form>
+        <div class="row">
+          <button type="button" data-speed="0">停车 0</button>
+          <button type="button" data-speed="30">30</button>
+          <button type="button" data-speed="80">80</button>
+        </div>
+        <p class="field-msg" id="speedMsg"></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>来电</legend>
+        <div class="row">
+          <button type="button" id="demoCall">触发来电</button>
+          <button type="button" id="demoCallCancel">对方取消来电</button>
+          <button type="button" id="demoCallEnd">结束通话</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>普通通知</legend>
+        <div class="row">
+          <button type="button" id="demoSms">触发短信</button>
+          <button type="button" id="demoMsg">触发一般消息</button>
+          <button type="button" id="demoDup">重发上一条（同编号）</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>警告</legend>
+        <div class="row">
+          <select id="warnType" aria-label="警告类型">
+            <option value="tire">后轮胎压低</option>
+            <option value="engine">发动机温度高</option>
+            <option value="battery">电池电压低</option>
+          </select>
+          <button type="button" id="demoWarn">触发警告</button>
+          <button type="button" id="demoWarnClear">解除该警告</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>其他</legend>
+        <label class="check"><input type="checkbox" id="demoMissing"> 模拟数据缺失（环境温度、后轮胎压）</label>
+        <label class="check"><input type="checkbox" id="debugToggle"> 显示调试信息</label>
+        <button type="button" id="demoReset" class="reset">重置演示</button>
+      </fieldset>
+
+      <div class="log-wrap">
+        <h3>演示日志</h3>
+        <ol id="log" class="log"></ol>
+      </div>
+
+      <pre id="debug" class="debug" hidden></pre>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
