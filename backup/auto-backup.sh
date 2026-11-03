@@ -5,6 +5,8 @@
 #   1. 项目文件有变化 → 创建一个提交（说明含时间和变更文件）；没有变化 → 不提交。
 #   2. 有尚未上传的提交 → 上传到 origin；失败时保留本地提交，下一次自动重试。
 #   3. 远程有本地没有的版本（冲突风险）→ 停止自动上传并写下暂停标记，绝不强制覆盖。
+#   4. 里程碑命名：如果存在 backup/next-tag.txt，就给当前版本打上标签并上传。
+#      第 1 行是标签名（英文、数字、点、短横线，如 v1.1），第 2 行起是中文说明。
 #
 # 不保存任何登录凭据：上传使用你电脑上已经配置好的 git 登录方式（SSH 密钥或凭据管理器）。
 set -u
@@ -13,6 +15,8 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$REPO_DIR/backup/backup.log"
 PAUSE="$REPO_DIR/backup/.backup-paused"
 LOCK="$REPO_DIR/backup/.backup-lock"
+TAG_REQ="$REPO_DIR/backup/next-tag.txt"
+DID_SOMETHING=0
 
 stamp() { date '+%Y-%m-%d %H:%M:%S'; }
 log() { echo "$(stamp) $*" >> "$LOG"; }
@@ -74,9 +78,30 @@ if [ -n "$(git status --porcelain)" ]; then
   MSG="自动备份 $(date '+%Y-%m-%d %H:%M')：更新 ${COUNT} 个文件（${FILES}）"
   if git commit -q -m "$MSG"; then
     log "已提交：$MSG"
+    DID_SOMETHING=1
   else
     log "提交失败，下次重试"
     exit 3
+  fi
+fi
+
+# 1b. 里程碑命名请求（请求文件本身在 .gitignore 中，不会被提交）
+if [ -f "$TAG_REQ" ]; then
+  TAG="$(head -n 1 "$TAG_REQ" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  NOTE="$(tail -n +2 "$TAG_REQ" | tr -d '\r' | sed '/^[[:space:]]*$/d')"
+  [ -z "$NOTE" ] && NOTE="$TAG"
+  if ! printf '%s' "$TAG" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$' || ! git check-ref-format "refs/tags/$TAG"; then
+    log "命名请求无效：标签名“$TAG”只能用英文、数字、点和短横线；已改名为 next-tag.invalid.txt"
+    mv -f "$TAG_REQ" "$REPO_DIR/backup/next-tag.invalid.txt"
+  elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+    log "标签 $TAG 已存在，不重复创建；已删除命名请求"
+    rm -f "$TAG_REQ"
+  elif git tag -a "$TAG" -m "$NOTE"; then
+    log "已命名版本：$TAG（$(git rev-parse --short HEAD)）$(printf '%s' "$NOTE" | head -n 1)"
+    rm -f "$TAG_REQ"
+    DID_SOMETHING=1
+  else
+    log "创建标签 $TAG 失败，下次重试"
   fi
 fi
 
@@ -101,15 +126,29 @@ if [ "$BEHIND" -gt 0 ]; then
   exit 4
 fi
 
-if [ "$AHEAD" -eq 0 ]; then
-  log "检查完成：没有变化"
-  exit 0
+# 3. 上传版本（不使用 --force）
+if [ "$AHEAD" -gt 0 ]; then
+  if git push -q origin "$BRANCH" 2>>"$LOG"; then
+    log "已上传 $AHEAD 个版本到 origin/$BRANCH"
+    DID_SOMETHING=1
+  else
+    log "上传失败，本地提交已保留，下次重试"
+    exit 3
+  fi
 fi
 
-# 3. 上传（不使用 --force）
-if git push -q origin "$BRANCH" 2>>"$LOG"; then
-  log "已上传 $AHEAD 个版本到 origin/$BRANCH"
-else
-  log "上传失败，本地提交已保留，下次重试"
-  exit 3
-fi
+# 4. 上传还没上传的标签（失败时下次重试；已存在的远程标签绝不覆盖）
+REMOTE_TAGS="$(git ls-remote --tags origin 2>>"$LOG")" || { log "读取远程标签失败，下次重试"; exit 3; }
+for t in $(git tag); do
+  if ! printf '%s\n' "$REMOTE_TAGS" | grep -q "refs/tags/$t\$"; then
+    if git push -q origin "refs/tags/$t" 2>>"$LOG"; then
+      log "已上传版本名称 $t"
+      DID_SOMETHING=1
+    else
+      log "上传版本名称 $t 失败，下次重试"
+    fi
+  fi
+done
+
+[ "$DID_SOMETHING" -eq 0 ] && log "检查完成：没有变化"
+exit 0
