@@ -117,11 +117,48 @@ body { background: var(--bg); color: var(--text); line-height: 1.45; }
   position: absolute; inset: -3px; z-index: 2; display: flex; align-items: center; justify-content: center;
   background: #07080a; border: .4cqw solid #3a3f45; border-radius: 3cqw;
 }
-.restrict-box { text-align: center; font-size: 5.4cqw; font-weight: 700; color: var(--warn); display: flex; flex-direction: column; gap: 1cqw; }
+.restrict-box { text-align: center; font-size: 4.6cqw; font-weight: 700; color: var(--warn); display: flex; flex-direction: column; gap: 1cqw; }
 .restrict-box small { font-size: 3.2cqw; color: var(--muted); font-weight: 400; }
 
-/* 通知弹窗：位于限制层之上，只覆盖页面内容区 */
-.overlay { position: absolute; inset: -3px; z-index: 3; display: flex; align-items: center; justify-content: center; }
+/* Menu 轮播：位于设置限制层之上、通知之下，只覆盖页面内容区 */
+.menu-layer { position: absolute; inset: -3px; z-index: 3; }
+.menu {
+  width: 100%; height: 100%; border-radius: 3cqw; background: #0b0d10; border: .5cqw solid #3a3f45;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.6cqw;
+}
+.menu-title { font-size: 3.2cqw; letter-spacing: .3em; color: var(--muted); }
+.menu-row { display: flex; align-items: center; justify-content: center; gap: 4cqw; }
+.mi { display: grid; place-items: center; border-radius: 50%; }
+.mi svg { width: 60%; height: 60%; }
+.mi.side { width: 11cqw; height: 11cqw; color: #59616b; border: .4cqw solid #2c3137; }
+.mi.main { width: 19cqw; height: 19cqw; color: var(--text); border: .7cqw solid var(--accent); background: #15181c; }
+.menu-label { font-size: 4.4cqw; font-weight: 700; color: var(--accent); letter-spacing: .08em; }
+.menu .dots { display: flex; gap: 1.4cqw; }
+.menu .dots i { width: 1.6cqw; height: 1.6cqw; border-radius: 50%; background: #3b4047; display: block; }
+.menu .dots i.on { background: var(--accent); }
+.menu-timer { width: 30%; height: .8cqw; background: #22262b; border-radius: 99px; overflow: hidden; }
+.menu-timer b { display: block; height: 100%; background: #6f7882; }
+
+/* 导航 / 媒体：未连接设备 */
+.nodevice { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1.4cqw; }
+.nodevice b { font-size: 4.4cqw; }
+.nodevice span { font-size: 3.4cqw; color: var(--muted); }
+.nodevice small { font-size: 2.8cqw; color: #6c757f; }
+
+/* 车辆：Bike status */
+.bike-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6cqw; }
+.bike-grid div { background: #15181c; border-radius: 1.6cqw; padding: 1.2cqw 2cqw; display: flex; flex-direction: column; }
+.bike-grid small { font-size: 2.8cqw; color: var(--muted); }
+.bike-grid b { font-size: 4.6cqw; font-variant-numeric: tabular-nums; }
+.diag-btn { margin-top: auto; text-align: center; border: .5cqw solid var(--text); border-radius: 1.6cqw; padding: 1cqw; font-size: 3.6cqw; }
+
+/* 设置列表 */
+.settings-list { list-style: none; margin: 0; padding: 0 4cqw; display: flex; flex-direction: column; gap: 1cqw; font-size: 4cqw; }
+.settings-list li { padding: .8cqw 2cqw; border: .5cqw solid transparent; border-radius: 1.4cqw; color: var(--muted); }
+.settings-list li.sel { border-color: var(--text); color: var(--text); }
+
+/* 通知弹窗：位于 Menu 和限制层之上，只覆盖页面内容区 */
+.overlay { position: absolute; inset: -3px; z-index: 5; display: flex; align-items: center; justify-content: center; }
 .ov {
   width: 100%; height: 100%; border-radius: 3cqw; padding: 3cqw 4cqw;
   display: flex; flex-direction: column; justify-content: center; gap: 1.6cqw; text-align: center;

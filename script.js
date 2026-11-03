@@ -9,10 +9,14 @@
 
 /* ---------- 常量（暂定原型决定，见 specification.md） ---------- */
 const PAGES = ['home', 'map', 'media', 'vehicle', 'settings'];
-const PAGE_LABEL = { home: '首页', map: '地图', media: '媒体', vehicle: '车辆', settings: '设置' };
+const PAGE_LABEL = { home: '首页', map: '导航', media: '媒体', vehicle: '车辆', settings: '设置' };
+const MENU_LABEL = { home: 'HOME', map: 'NAVIGATION', media: 'MEDIA', vehicle: 'VEHICLE', settings: 'SETTINGS' };
+const SETTINGS_ITEMS = ['General', 'Ride Customization', 'Appearance', 'Bluetooth', 'Phone Notifications', 'Software'];
+const SETTINGS_PER_SCREEN = 4;
 const TRIP_ITEMS = ['odometer', 'ambient', 'range', 'tripA', 'tripB'];
 const TRIP_LABEL = { odometer: '总里程', ambient: '环境温度', range: '预计续航', tripA: 'Trip A', tripB: 'Trip B' };
 const BOOT_MS = 3000;
+const MENU_MS = 3000;     // Menu 停留 3 秒不操作后自动进入所选页面
 const NOTICE_MS = 5000;
 const CALL_MS = 20000;
 const QUEUE_MAX = 5;
@@ -53,6 +57,10 @@ function initialState() {
     currentPage: 'home',
     speed: 0,
     tripIndex: 0,
+    menuOpen: false,            // Page 键打开的 Menu 轮播
+    menuSelection: null,        // Menu 当前选中的页面
+    menuDeadline: null,         // Menu 自动进入所选页面的时间
+    settingsIndex: 0,           // 设置列表的高亮行
     activeOverlay: null,        // {kind:'warning'|'call'|'notice', id, ...}
     pendingNotifications: [],   // 等待显示的普通通知
     callState: 'IDLE',          // IDLE | RINGING | CONNECTED
@@ -182,6 +190,40 @@ function reconcile() {
   }
 
   state.activeWarning = state.activeOverlay && state.activeOverlay.kind === 'warning' ? state.activeOverlay : null;
+
+  // 4. Menu：通知、来电或警告出现时取消 Menu，留在原页面；否则检查 3 秒超时
+  if (state.menuOpen && state.activeOverlay) {
+    log(`Menu 被${{ warning: '警告', call: '来电', notice: '通知' }[state.activeOverlay.kind]}打断，已取消，留在${PAGE_LABEL[state.currentPage]}`);
+    closeMenu();
+  } else if (state.menuOpen && state.menuDeadline !== null && t >= state.menuDeadline) {
+    enterMenuSelection('3 秒无操作');
+  }
+}
+
+function closeMenu() {
+  state.menuOpen = false;
+  state.menuSelection = null;
+  state.menuDeadline = null;
+}
+
+function goToPage(page) {
+  if (page === 'settings' && state.currentPage !== 'settings') state.settingsIndex = 0;
+  state.currentPage = page;
+}
+
+function enterMenuSelection(reason) {
+  const target = state.menuSelection;
+  closeMenu();
+  goToPage(target);
+  log(`${reason}，进入${PAGE_LABEL[target]}`);
+  return `进入${PAGE_LABEL[target]}`;
+}
+
+function moveMenu(step) {
+  const i = PAGES.indexOf(state.menuSelection);
+  state.menuSelection = PAGES[(i + step + PAGES.length) % PAGES.length];
+  state.menuDeadline = now() + MENU_MS;  // 每次切换选项都重新计时
+  return `Menu 选中 ${MENU_LABEL[state.menuSelection]}`;
 }
 
 function commit() {
@@ -251,29 +293,63 @@ function route(btn) {
     }
   }
 
+  // Menu 层
+  if (state.menuOpen) {
+    if (btn === 'page' || btn === 'right') return moveMenu(1);
+    if (btn === 'left') return moveMenu(-1);
+    if (btn === 'ok') return enterMenuSelection('确认');
+    if (btn === 'home') {
+      closeMenu();
+      goToPage('home');
+      return '关闭 Menu，返回首页';
+    }
+    return '忽略：Menu 打开时只接受 Page / 左右 / OK / Home';
+  }
+
   // 页面层
   if (btn === 'page') {
     const i = PAGES.indexOf(state.currentPage);
-    state.currentPage = PAGES[(i + 1) % PAGES.length];
-    return `切换到${PAGE_LABEL[state.currentPage]}`;
+    state.menuOpen = true;
+    state.menuSelection = PAGES[(i + 1) % PAGES.length];
+    state.menuDeadline = now() + MENU_MS;
+    return `打开 Menu，选中 ${MENU_LABEL[state.menuSelection]}`;
   }
   if (btn === 'home') {
     if (state.currentPage === 'home') return '已在首页，保持不变';
-    state.currentPage = 'home';
+    goToPage('home');
     return '返回首页';
   }
-  if (btn === 'trip') {
-    if (state.currentPage !== 'home') return '无操作：Trip 只在首页可用';
-    state.tripIndex = (state.tripIndex + 1) % TRIP_ITEMS.length;
-    return `小窗口：${TRIP_LABEL[TRIP_ITEMS[state.tripIndex]]}`;
+  if (state.currentPage === 'home') {
+    if (btn === 'trip' || btn === 'down') {
+      state.tripIndex = (state.tripIndex + 1) % TRIP_ITEMS.length;
+      return `小窗口：${TRIP_LABEL[TRIP_ITEMS[state.tripIndex]]}`;
+    }
+    if (btn === 'up') {
+      state.tripIndex = (state.tripIndex - 1 + TRIP_ITEMS.length) % TRIP_ITEMS.length;
+      return `小窗口：${TRIP_LABEL[TRIP_ITEMS[state.tripIndex]]}`;
+    }
+    return '无操作：首页的左右 / 确认没有功能';
   }
+  if (btn === 'trip') return '无操作：Trip 只在首页可用';
+  if (state.currentPage === 'settings') {
+    if (isRestricted()) return '忽略：行驶中设置已隐藏';
+    if (btn === 'down' || btn === 'up') {
+      const next = state.settingsIndex + (btn === 'down' ? 1 : -1);
+      if (next < 0 || next >= SETTINGS_ITEMS.length) return '无操作：已在列表' + (next < 0 ? '顶部' : '底部');
+      state.settingsIndex = next;
+      return `高亮：${SETTINGS_ITEMS[next]}`;
+    }
+    if (btn === 'ok') return '无操作：设置子页面不在本次范围内';
+    return '无操作';
+  }
+  if (state.currentPage === 'vehicle' && btn === 'ok') return '无操作：诊断子页面不在本次范围内';
   return '无操作：本页面没有方向 / 确认功能';
 }
 
 function powerOff() {
   const keep = { speed: state.speed, dataMissing: state.dataMissing, vehicle: state.vehicle, seq: state.seq };
   state = { ...initialState(), ...keep };
-  log('关机：画面变黑，清除全部弹窗、队列、来电、警告和计时');
+  log('关机：画面变黑，清除 Menu、全部弹窗、队列、来电、警告和计时');
 }
 
 /* ---------- 演示面板事件 ---------- */
@@ -421,6 +497,40 @@ function tripValue(key) {
   return '—';
 }
 
+// 简单的线框图标（自绘，非品牌素材）
+const ICONS = {
+  home: '<path d="M4 12 L12 5 L20 12 M6.5 10.5 V19 H10 V14.5 H14 V19 H17.5 V10.5" />',
+  map: '<path d="M12 21 C7 15 6 12.5 6 10 A6 6 0 0 1 18 10 C18 12.5 17 15 12 21 Z" /><circle cx="12" cy="10" r="2.2" />',
+  media: '<path d="M9 17 V6 L19 4 V15" /><circle cx="7" cy="17" r="2.2" /><circle cx="17" cy="15" r="2.2" />',
+  vehicle: '<circle cx="6" cy="16" r="3" /><circle cx="18" cy="16" r="3" /><path d="M6 16 L10 10 H14 L18 16 M10 10 L12 16 H15 M14 10 L15.5 7.5 H18" />',
+  settings: '<circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="7" stroke-dasharray="3 2.5" stroke-width="3" />'
+};
+const icon = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[p]}</svg>`;
+
+function renderMenu() {
+  if (!state.menuOpen) return '';
+  const i = PAGES.indexOf(state.menuSelection);
+  const prev = PAGES[(i - 1 + PAGES.length) % PAGES.length];
+  const next = PAGES[(i + 1) % PAGES.length];
+  const left = Math.max(0, state.menuDeadline - now());
+  const dots = PAGES.map(p => `<i class="${p === state.menuSelection ? 'on' : ''}"></i>`).join('');
+  return `<div class="menu" data-sel="${state.menuSelection}">
+      <div class="menu-title">MENU</div>
+      <div class="menu-row">
+        <span class="mi side">${icon(prev)}</span>
+        <span class="mi main">${icon(state.menuSelection)}</span>
+        <span class="mi side">${icon(next)}</span>
+      </div>
+      <div class="menu-label">${MENU_LABEL[state.menuSelection]}</div>
+      <div class="dots">${dots}</div>
+      <div class="menu-timer"><b style="width:${(left / MENU_MS) * 100}%"></b></div>
+    </div>`;
+}
+
+function renderNoDevice(fn) {
+  return `<div class="nodevice"><b>No Device Connected</b><span>Connect a Bluetooth Device to Use ${fn}</span><small>未连接手机（本原型不连接真实设备）</small></div>`;
+}
+
 function renderPersistent() {
   const gear = gearFor(state.speed);
   const callTag = state.callState === 'CONNECTED' ? '<span class="tag call-tag">📞 通话中</span>' : '';
@@ -449,18 +559,23 @@ function renderPage() {
         </div>`;
     }
     case 'map':
-      return `${header}<div class="placeholder">🗺<p>导航功能不在本次范围内</p></div>`;
+      return `${header}${renderNoDevice('Navigation')}`;
     case 'media':
-      return `${header}<div class="placeholder">♫<p>媒体功能不在本次范围内</p></div>`;
+      return `${header}${renderNoDevice('Media')}`;
     case 'vehicle':
-      return `${header}<dl class="vehicle-list">
-          <dt>前轮胎压</dt><dd>${fmt(v.tireFront, ' bar', 1)}</dd>
-          <dt>后轮胎压</dt><dd>${fmt(v.tireRear, ' bar', 1)}</dd>
-          <dt>冷却液温度</dt><dd>${fmt(v.coolant, ' °C')}</dd>
-          <dt>电压</dt><dd>${fmt(v.voltage, ' V', 1)}</dd>
-        </dl>`;
-    case 'settings':
-      return `${header}<div class="placeholder settings-ph">⚙<p>设置（顶层占位）</p><small>亮度 · 单位 · 蓝牙 · 时钟<br>子页面不在本次范围内</small></div>`;
+      return `${header}<div class="bike-grid">
+          <div><small>前轮胎压</small><b>${fmt(v.tireFront, ' bar', 1)}</b></div>
+          <div><small>后轮胎压</small><b>${fmt(v.tireRear, ' bar', 1)}</b></div>
+          <div><small>冷却液温度</small><b>${fmt(v.coolant, ' °C')}</b></div>
+          <div><small>电压</small><b>${fmt(v.voltage, ' V', 1)}</b></div>
+        </div>
+        <div class="diag-btn">Diagnostics</div>`;
+    case 'settings': {
+      const start = Math.floor(state.settingsIndex / SETTINGS_PER_SCREEN) * SETTINGS_PER_SCREEN;
+      const items = SETTINGS_ITEMS.slice(start, start + SETTINGS_PER_SCREEN).map((it, k) =>
+        `<li class="${start + k === state.settingsIndex ? 'sel' : ''}">${it}</li>`).join('');
+      return `${header}<ul class="settings-list" data-index="${state.settingsIndex}">${items}</ul>`;
+    }
   }
   return '';
 }
@@ -510,11 +625,17 @@ function availableHelp() {
   if (ov && ov.kind === 'call') return { text: '来电接管输入。可用：确认 接听 · 下 拒接 · Power 关机', keys: ['ok', 'down', 'power'] };
   if (ov && ov.kind === 'notice') return { text: '通知接管输入。可用：确认 关闭 · Power 关机', keys: ['ok', 'power'] };
   if (ov && ov.kind === 'warning') return { text: '警告接管输入。可用：确认 我已看到 · Power 关机', keys: ['ok', 'power'] };
+  if (state.menuOpen) {
+    const left = Math.ceil(Math.max(0, state.menuDeadline - now()) / 1000);
+    return { text: `Menu：Page / 右 下一项 · 左 上一项 · OK 立即进入 · Home 回首页 · ${left} 秒后自动进入 ${MENU_LABEL[state.menuSelection]}`,
+      keys: ['page', 'right', 'left', 'ok', 'home', 'power'] };
+  }
   const keys = ['page', 'home', 'power'];
-  let text = 'Page 下一页 · Home 首页';
-  if (state.currentPage === 'home') { keys.push('trip'); text += ' · Trip 切换小窗口'; }
-  if (isRestricted()) text += ' · 设置受限：请停车后操作';
-  return { text: `可用：${text} · 方向/确认在本页无功能`, keys };
+  let text = 'Page 打开 Menu · Home 首页';
+  if (state.currentPage === 'home') { keys.push('trip', 'down', 'up'); text += ' · Trip / 下 下一项 · 上 上一项'; }
+  else if (state.currentPage === 'settings' && !isRestricted()) { keys.push('up', 'down'); text += ' · 上 / 下 移动高亮（子页面不在范围内）'; }
+  if (isRestricted()) text += ' · 行驶中设置已隐藏，请停车后操作';
+  return { text: `可用：${text}`, keys };
 }
 
 function render() {
@@ -535,7 +656,10 @@ function render() {
     $('page').dataset.page = state.currentPage;
     const restricted = isRestricted();
     $('restrictLayer').hidden = !restricted;
-    $('restrictLayer').innerHTML = restricted ? '<div class="restrict-box">⛔ 请停车后操作<small>行驶中设置不可用</small></div>' : '';
+    $('restrictLayer').innerHTML = restricted ? '<div class="restrict-box">Settings are hidden while riding<small>行驶中设置已隐藏 · 请停车后操作</small></div>' : '';
+    const menuHtml = renderMenu();
+    $('menuLayer').hidden = !menuHtml;
+    $('menuLayer').innerHTML = menuHtml;
     const ovHtml = renderOverlay();
     $('overlay').hidden = !ovHtml;
     $('overlay').innerHTML = ovHtml;
@@ -566,6 +690,11 @@ function snapshot() {
     settingsRestricted: isRestricted(),
     tripIndex: state.tripIndex,
     tripItem: TRIP_ITEMS[state.tripIndex],
+    menuOpen: state.menuOpen,
+    menuSelection: state.menuSelection,
+    menuDeadlineIn: state.menuDeadline ? `${Math.max(0, state.menuDeadline - now())} ms` : null,
+    settingsIndex: state.settingsIndex,
+    settingsItem: SETTINGS_ITEMS[state.settingsIndex],
     activeOverlay: state.activeOverlay,
     overlayDeadlineIn: state.overlayDeadline ? `${Math.max(0, state.overlayDeadline - now())} ms` : null,
     pendingNotifications: state.pendingNotifications.map(n => n.id),
@@ -645,6 +774,6 @@ $('demoMissing').addEventListener('change', e => setDataMissing(e.target.checked
 $('demoReset').addEventListener('click', resetDemo);
 $('debugToggle').addEventListener('change', e => { $('debug').hidden = !e.target.checked; render(); });
 
-// 统一计时：检查开机、通知、来电的截止时间
+// 统一计时：检查开机、Menu、通知、来电的截止时间
 setInterval(commit, TICK_MS);
 commit();
