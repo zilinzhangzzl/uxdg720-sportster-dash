@@ -73,7 +73,7 @@ python3 tests/acceptance_test.py
 
 自动备份属于开发环境，不在网页里运行；关闭网页不影响它，但电脑关机或休眠时不会执行。
 
-**当前状态：已配置脚本，尚未验证启用。** 仓库：`https://github.com/zilinzhangzzl/uxdg720-sportster-dash`。脚本不保存任何密码或令牌；登录信息由 Git Credential Manager（Windows 凭据管理器）保存。
+**当前状态：已启用。** 2026-11-02 21:00 验证：测试修改被计划任务自动提交并上传（版本 `6d3cd36`）。 仓库：`https://github.com/zilinzhangzzl/uxdg720-sportster-dash`。脚本不保存任何密码或令牌；登录信息由 Git Credential Manager（Windows 凭据管理器）保存。
 
 ### macOS / Linux
 
